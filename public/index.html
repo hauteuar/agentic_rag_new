@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Agentic RAG — Private Bank UI</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<header>
+  <div class="brand">💼 Agentic RAG — Private Bank</div>
+  <div class="right">
+    <label>API Base: <input id="apiBase" value="/api" /></label>
+    <button id="btnSetApi">Set</button>
+  </div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="dashboard" class="active">Dashboard</button>
+  <button data-tab="session">Session</button>
+  <button data-tab="upload">Upload</button>
+  <button data-tab="chat">Chat</button>
+  <button data-tab="db2">DB2 Import</button>
+  <button data-tab="diff">DB2 ↔ CSV Diff</button>
+  <button data-tab="summarizer">Code Summarizer</button>
+  <button data-tab="lineage">Lineage / CRUD</button>
+  <button data-tab="graphs">Graphs</button>
+  <button data-tab="fields">Field Usage</button>
+  <button data-tab="export">Export</button>
+</nav>
+
+<main>
+  <!-- Dashboard -->
+  <section class="panel tab" id="tab-dashboard">
+    <h2>Summary Dashboard</h2>
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-title">Session</div>
+        <div class="card-value"><span id="dashSessionId">-</span></div>
+        <div class="card-sub">Current schema: <span id="dashSchema">-</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Messages</div>
+        <div class="card-value" id="dashMsgCount">0</div>
+        <div class="card-sub">User / Assistant</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Artifacts</div>
+        <div class="card-value" id="dashArtifacts">0</div>
+        <div class="card-sub">Chunks indexed</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card stretch">
+        <div class="card-title">Recent Chat</div>
+        <div id="dashRecentChat" class="list"></div>
+      </div>
+      <div class="card stretch">
+        <div class="card-title">Lineage Snapshot</div>
+        <div class="grid-2 flush">
+          <div>
+            <div class="pill">Files</div>
+            <ul id="dashFiles"></ul>
+          </div>
+          <div>
+            <div class="pill">Tables</div>
+            <ul id="dashTables"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Session -->
+  <section class="panel tab hidden" id="tab-session">
+    <h2>Session</h2>
+    <div class="row">
+      <button id="btnNewSession">New Session</button>
+      <input id="sessionId" placeholder="Session ID"/>
+      <button id="btnLoadHistory">Load History</button>
+    </div>
+    <div id="sessions"></div>
+  </section>
+
+  <!-- Upload -->
+  <section class="panel tab hidden" id="tab-upload">
+    <h2>Upload Documents</h2>
+    <input type="file" id="docFiles" multiple/>
+    <button id="btnIngestDocs">Ingest</button>
+
+    <h3>Upload Code (COBOL/COPYBOOK/JCL)</h3>
+    <input type="file" id="codeFiles" multiple/>
+    <button id="btnIngestCode">Ingest Code</button>
+
+    <h3>Batch Upload (ZIP)</h3>
+    <input type="file" id="zipFile" accept=".zip"/>
+    <button id="btnBatchZip">Upload ZIP</button>
+    <small>ZIP may include PDFs, DOCX, TXT, COBOL (.cbl/.cob/.cpy), JCL (.jcl), CICS (.cics). Files will be chunked and indexed.</small>
+  </section>
+
+  <!-- Chat -->
+  <section class="panel tab hidden" id="tab-chat">
+    <h2>Chat</h2>
+    <div id="chatBox"></div>
+    <div class="row">
+      <input id="chatInput" placeholder="Ask about your internal documents…"/>
+      <button id="btnSendChat">Send</button>
+    </div>
+  </section>
+
+  <!-- DB2 Import -->
+  <section class="panel tab hidden" id="tab-db2">
+    <h2>DB2 Import</h2>
+    <input id="db2Schema" placeholder="Schema (optional)"/>
+    <input id="db2Table" placeholder="Table"/>
+    <input id="db2Limit" type="number" value="0" min="0"/>
+    <button id="btnDb2Import">Import</button>
+  </section>
+
+  <!-- Diff -->
+  <section class="panel tab hidden" id="tab-diff">
+    <h2>DB2 ↔ CSV Diff</h2>
+    <input id="diffSchema" placeholder="Schema (optional)"/>
+    <input id="diffTable" placeholder="DB2 Table"/>
+    <input id="diffKeys" placeholder="Key columns, comma-separated" value=""/>
+    <input id="diffDb2Limit" type="number" value="2000" min="100"/>
+    <input type="file" id="diffCsv" accept=".csv"/>
+    <button id="btnRunDiff">Run Diff</button>
+    <pre id="diffResult"></pre>
+  </section>
+
+  <!-- Summarizer -->
+  <section class="panel tab hidden" id="tab-summarizer">
+    <h2>Code Summarizer</h2>
+    <textarea id="codePrompt">Summarize the mainframe code: entry points, files/tables used, key business rules, side effects, and outputs.</textarea>
+    <button id="btnSummarize">Summarize</button>
+    <div id="summary"></div>
+  </section>
+
+  <!-- Lineage -->
+  <section class="panel tab hidden" id="tab-lineage">
+    <h2>Lineage / CRUD</h2>
+    <div class="row">
+      <button id="btnLineage">Analyze Lineage</button>
+      <button id="btnCrud">Generate CRUD Map JSON</button>
+    </div>
+    <pre id="lineageJson"></pre>
+  </section>
+
+  <!-- Graphs -->
+  <section class="panel tab hidden" id="tab-graphs">
+    <h2>Graphs</h2>
+    <div class="row">
+      <button id="btnCrudGraph">Build CRUD Graph</button>
+    </div>
+    <div class="row">
+      <input id="depElement" placeholder="Element (e.g., ACCT_FILE or PGM::MYPROG)"/>
+      <input id="depRadius" type="number" value="2" min="1"/>
+      <button id="btnDepGraph">Build Dependency Graph</button>
+    </div>
+    <iframe id="graphFrame" title="Graph" style="width:100%;height:520px;border:1px solid #2c2c2c;background:#101010;"></iframe>
+  </section>
+
+  <!-- Fields -->
+  <section class="panel tab hidden" id="tab-fields">
+    <h2>Field Usage</h2>
+    <div class="row">
+      <input id="fldCopybook" placeholder="Copybook (e.g., RAU or RAU.cpy)"/>
+      <button id="btnFieldUsage">Analyze Fields</button>
+    </div>
+    <pre id="fldResult"></pre>
+  </section>
+
+  <!-- Export -->
+  <section class="panel tab hidden" id="tab-export">
+    <h2>Export</h2>
+    <label><input type="checkbox" id="includeLLM" checked/> Include last LLM synthesis</label>
+    <button id="btnExportMd">Generate Markdown</button>
+    <div id="exportLinks"></div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

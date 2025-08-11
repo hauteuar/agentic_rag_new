@@ -138,28 +138,39 @@ from field_lineage import analyze_fields
 from pydantic import BaseModel
 
 class CsvDiffResult(BaseModel):
-    schema: dict
-    data: dict
+    schema_diff: dict   # was `schema`
+    data_diff: dict  
 
+# app.py
 @api.post("/db2/csv-diff", response_model=CsvDiffResult)
 def db2_csv_diff(
     session_id: str = Form(...),
     table: str = Form(...),
-    schema: str | None = Form(None),
-    key_cols: str = Form(...),  # comma-separated list of key columns
+    db2_schema: str | None = Form(None),     # <— new, safer name
+    schema: str | None = Form(None),         # <— backward-compat (optional)
+    key_cols: str = Form(""),
     csv_file: UploadFile = File(...),
     sample_mismatches: int = Form(20),
     db2_limit: int = Form(2000),
 ):
     if not db.session_exists(session_id):
         raise HTTPException(400, "Invalid session_id")
+
+    # prefer db2_schema; fall back to schema; fall back to CURRENT SCHEMA
+    eff_schema = db2_schema or schema or current_schema()
+
     csv_b = csv_file.file.read()
     df_csv = read_csv_bytes(csv_b)
-    df_db2 = fetch_db2_sample(table, schema, limit=db2_limit)
+    df_db2 = fetch_db2_sample(table, eff_schema, limit=db2_limit)
+
     sdiff = schema_diff(df_db2, df_csv)
-    ddiff = data_diff_on_key(df_db2, df_csv, [c.strip() for c in key_cols.split(",") if c.strip()], sample=sample_mismatches)
-    db.add_message(session_id, role="system", content=f"DB2/CSV diff run on {schema+'.' if schema else ''}{table} keys={key_cols}")
-    return {"schema": sdiff, "data": ddiff}
+    keys_list = [c.strip() for c in (key_cols or "").split(",") if c.strip()] or suggest_keys(df_db2, df_csv)
+    ddiff = data_diff_on_key(df_db2, df_csv, keys_list, sample=sample_mismatches)
+
+    db.add_message(session_id, role="system",
+                   content=f"DB2/CSV diff on {eff_schema}.{table} keys={keys_list}")
+
+    return {"schema_diff": sdiff, "data_diff": ddiff}
 
 @api.get("/analysis/lineage/{session_id}")
 def analysis_lineage(session_id: str):
